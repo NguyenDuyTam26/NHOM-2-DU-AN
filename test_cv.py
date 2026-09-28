@@ -39,7 +39,7 @@ def select_image2():
         else:
             messagebox.showerror("Lỗi", "Không thể đọc Ảnh 2")
 
-# --- CHỨC NĂNG 2: BẢNG TỔNG HỢP 3x3 (Gốc, Gray, HSV, Bitwise AND) ---
+# --- CHỨC NĂNG 2: BẢNG TỔNG HỢP 3x3 ---
 def process_and_show_3x3():
     global img1_orig, img2_orig
     
@@ -119,41 +119,56 @@ def increase_brightness():
     cv2.waitKey(0)
     cv2.destroyAllWindows()
 
-# --- BÀI TẬP 6: PHÉP BIẾN ĐỔI HÌNH HỌC (CẢI TIẾN KHÔNG BỂ ẢNH) ---
+# --- BÀI TẬP 6: PHÉP BIẾN ĐỔI HÌNH HỌC (CÙNG CỬA SỔ KHUNG) ---
 def geometric_transformations():
     global img1_orig
     if img1_orig is None:
         messagebox.showwarning("Cảnh báo", "Vui lòng chọn Ảnh 1 trước!")
         return
 
-    # 1. Xoay ảnh 90 độ
+    # Kích thước chuẩn ô cơ sở
+    base_w, base_h = 300, 300
+
+    # 1. Ảnh gốc
+    img_orig_res = cv2.resize(img1_orig, (base_w, base_h))
+
+    # 2. Xoay 90 độ
     img_rotated = cv2.rotate(img1_orig, cv2.ROTATE_90_CLOCKWISE)
+    img_rotated_res = cv2.resize(img_rotated, (base_w, base_h))
 
-    # 2. Dịch chuyển ảnh sang phải 50 pixel
-    h_orig, w_orig = img1_orig.shape[:2]
-    M_translation = np.float32([[1, 0, 50], [0, 1, 0]])
-    img_translated = cv2.warpAffine(img1_orig, M_translation, (w_orig, h_orig))
+    # 3. Dịch chuyển 50px sang phải
+    h_o, w_o = img1_orig.shape[:2]
+    M_trans = np.float32([[1, 0, 50], [0, 1, 0]])
+    img_translated = cv2.warpAffine(img1_orig, M_trans, (w_o, h_o))
+    img_translated_res = cv2.resize(img_translated, (base_w, base_h))
 
-    # 3. Phóng to 1.5 lần sử dụng cv2.INTER_CUBIC kết hợp cv2.detailEnhance để giữ chi tiết sắc nét, không bị vỡ ảnh
-    img_scaled = cv2.resize(img1_orig, None, fx=1.5, fy=1.5, interpolation=cv2.INTER_CUBIC)
-    img_scaled = cv2.detailEnhance(img_scaled, sigma_s=10, sigma_r=0.15)
+    # 4. Phóng to 1.5x so với ảnh gốc (dùng INTER_CUBIC kết hợp unsharp mask để nét)
+    scaled_w, scaled_h = int(base_w * 1.5), int(base_h * 1.5)  # 450x450
+    img_scaled_1_5x = cv2.resize(img1_orig, (scaled_w, scaled_h), interpolation=cv2.INTER_CUBIC)
+    
+    # Bộ lọc làm nét sắc cạnh chống bể nét
+    blur = cv2.GaussianBlur(img_scaled_1_5x, (0, 0), 3.0)
+    img_scaled_1_5x = cv2.addWeighted(img_scaled_1_5x, 1.5, blur, -0.5, 0)
 
-    w, h = 300, 300
-    res_orig = cv2.resize(img1_orig, (w, h))
-    res_rot = cv2.resize(img_rotated, (w, h))
-    res_trans = cv2.resize(img_translated, (w, h))
-    res_scale = cv2.resize(img_scaled, (w, h))
+    # Ghép 3 ô nhỏ (Gốc, Xoay, Dịch) thành cột bên trái
+    cv2.putText(img_orig_res, "1. Goc", (10, 25), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+    cv2.putText(img_rotated_res, "2. Xoay 90 Do", (10, 25), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+    cv2.putText(img_translated_res, "3. Dich Sang Phai 50px", (10, 25), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+    
+    left_column = np.vstack((img_orig_res, img_rotated_res, img_translated_res)) # Cao 900, Rộng 300
 
-    cv2.putText(res_orig, "Goc", (10, 25), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
-    cv2.putText(res_rot, "Xoay 90 Do", (10, 25), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
-    cv2.putText(res_trans, "Dich Sang Phai 50px", (10, 25), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
-    cv2.putText(res_scale, "Phong To 1.5x (Sac Net)", (10, 25), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+    # Ô bên phải dành riêng cho ảnh Phóng to 1.5x thực tế (450x450) đặt ở giữa khung 450x900
+    cv2.putText(img_scaled_1_5x, "4. Phong To 1.5x (Khong Be)", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+    
+    right_column = np.zeros((900, 450, 3), dtype=np.uint8)
+    # Canh giữa ảnh phóng to ở phần cột bên phải
+    start_y = (900 - scaled_h) // 2
+    right_column[start_y:start_y + scaled_h, 0:scaled_w] = img_scaled_1_5x
 
-    row1 = np.hstack((res_orig, res_rot))
-    row2 = np.hstack((res_trans, res_scale))
-    combined = np.vstack((row1, row2))
+    # Ghép cột trái và cột phải vào CÙNG 1 KHUNG MÀN HÌNH
+    combined_frame = np.hstack((left_column, right_column))
 
-    cv2.imshow("Bai Tap 6: Phep Bien Doi Hinh Hoc", combined)
+    cv2.imshow("Bai Tap 6: Phep Bien Doi Hinh Hoc & Phong To 1.5x (Cung Khung)", combined_frame)
     cv2.waitKey(0)
     cv2.destroyAllWindows()
 
